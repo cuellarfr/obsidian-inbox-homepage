@@ -1,5 +1,58 @@
 import { App, Component, MarkdownRenderer, TFile, normalizePath } from "obsidian";
 
+const ATTACHMENT_FOLDER = "_attachments";
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function attachmentTimestamp(now: Date): string {
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
+
+function extFromMime(mime: string): string {
+  if (mime === "image/jpeg") return "jpg";
+  if (mime === "image/svg+xml") return "svg";
+  const sub = (mime.split("/")[1] || "bin").toLowerCase();
+  return sub.replace(/[^a-z0-9]/g, "");
+}
+
+async function ensureAttachmentsFolder(app: App): Promise<void> {
+  if (!app.vault.getAbstractFileByPath(ATTACHMENT_FOLDER)) {
+    await app.vault.createFolder(ATTACHMENT_FOLDER);
+  }
+}
+
+async function uniqueAttachmentPath(app: App, baseName: string, ext: string): Promise<string> {
+  let candidate = normalizePath(`${ATTACHMENT_FOLDER}/${baseName}.${ext}`);
+  let i = 1;
+  while (app.vault.getAbstractFileByPath(candidate)) {
+    candidate = normalizePath(`${ATTACHMENT_FOLDER}/${baseName}-${i}.${ext}`);
+    i += 1;
+  }
+  return candidate;
+}
+
+function insertAtCursor(textarea: HTMLTextAreaElement, text: string): void {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  textarea.value = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
+  const caret = start + text.length;
+  textarea.selectionStart = textarea.selectionEnd = caret;
+  textarea.focus();
+}
+
+async function attachImageFile(app: App, file: File, textarea: HTMLTextAreaElement): Promise<void> {
+  if (!file.type.startsWith("image/")) return;
+  await ensureAttachmentsFolder(app);
+  const baseName = `Pasted image ${attachmentTimestamp(new Date())}`;
+  const ext = extFromMime(file.type);
+  const path = await uniqueAttachmentPath(app, baseName, ext);
+  await app.vault.createBinary(path, await file.arrayBuffer());
+  const filename = path.slice(ATTACHMENT_FOLDER.length + 1);
+  insertAtCursor(textarea, `\n![[${filename}]]\n`);
+}
+
 export async function renderNotesWall(container: HTMLElement, app: App, component: Component) {
   const section = container.createEl("div", { cls: "hp-section hp-notes-section" });
 
@@ -19,8 +72,49 @@ export async function renderNotesWall(container: HTMLElement, app: App, componen
     cls: "hp-compose-tags",
   }) as HTMLInputElement;
 
-  const submitBtn = formFooter.createEl("button", { cls: "hp-compose-submit" });
+  const fileInput = formFooter.createEl("input", {
+    type: "file",
+    cls: "hp-compose-file-input",
+    attr: { accept: "image/*", multiple: "true" },
+  }) as HTMLInputElement;
+
+  const attachBtn = formFooter.createEl("button", { cls: "hp-compose-attach", attr: { "aria-label": "Attach image" } });
+  attachBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.58 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
+
+  const submitBtn = formFooter.createEl("button", { cls: "hp-compose-submit", attr: { "aria-label": "Post note" } });
   submitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const files = Array.from(fileInput.files ?? []);
+    for (const file of files) await attachImageFile(app, file, textarea);
+    fileInput.value = "";
+  });
+
+  textarea.addEventListener("paste", async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const images: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) images.push(f);
+      }
+    }
+    if (images.length === 0) return;
+    e.preventDefault();
+    for (const file of images) await attachImageFile(app, file, textarea);
+  });
+
+  form.addEventListener("dragover", (e) => {
+    if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+  });
+  form.addEventListener("drop", async (e) => {
+    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    e.preventDefault();
+    for (const file of files) await attachImageFile(app, file, textarea);
+  });
 
   const createNote = async () => {
     const content = textarea.value.trim();

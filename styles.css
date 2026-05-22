@@ -144,6 +144,11 @@
   color: var(--text-faint);
 }
 
+.hp-compose-file-input {
+  display: none;
+}
+
+.hp-compose-attach,
 .hp-compose-submit {
   display: flex;
   align-items: center;
@@ -157,6 +162,12 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: background 80ms, color 80ms, border-color 80ms;
+}
+
+.hp-compose-attach:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
 }
 
 .hp-compose-submit:hover {
