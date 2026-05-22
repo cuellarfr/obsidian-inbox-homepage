@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-inbox-homepage",
+  "name": "Inbox Homepage",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Custom homepage with notes wall, recent clippings, and task views.",
+  "author": "Carlos Cuellar",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
