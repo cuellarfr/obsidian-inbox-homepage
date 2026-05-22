@@ -127,12 +127,14 @@
 
 .hp-compose-tags {
   flex: 1;
+  height: 2.25rem;
   background: transparent;
   border: none;
   color: var(--text-muted);
   font-size: 0.8125rem;
   font-family: var(--font-interface);
-  padding: 0;
+  padding: 1px 0.5rem;
+  line-height: 1;
 }
 
 .hp-compose-tags:focus {
@@ -153,7 +155,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
+  width: 2.25rem;
   height: 2rem;
   background: var(--background-modifier-hover);
   border: 1px solid var(--background-modifier-border);
@@ -162,6 +164,12 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: background 80ms, color 80ms, border-color 80ms;
+}
+
+.hp-compose-attach svg,
+.hp-compose-submit svg {
+  width: 22px !important;
+  height: 22px !important;
 }
 
 .hp-compose-attach:hover {
