@@ -1,6 +1,8 @@
 import { App, Component, MarkdownRenderer, TFile, normalizePath } from "obsidian";
 
 const ATTACHMENT_FOLDER = "_attachments";
+const WEBP_QUALITY = 0.85;
+const SKIP_WEBP_CONVERT = new Set(["image/gif", "image/svg+xml", "image/webp"]);
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -42,13 +44,41 @@ function insertAtCursor(textarea: HTMLTextAreaElement, text: string): void {
   textarea.focus();
 }
 
+async function convertToWebp(file: File): Promise<{ data: ArrayBuffer; ext: string }> {
+  if (SKIP_WEBP_CONVERT.has(file.type)) {
+    return { data: await file.arrayBuffer(), ext: extFromMime(file.type) };
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("Failed to decode image"));
+      i.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { data: await file.arrayBuffer(), ext: extFromMime(file.type) };
+    ctx.drawImage(img, 0, 0);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/webp", WEBP_QUALITY);
+    });
+    if (!blob) return { data: await file.arrayBuffer(), ext: extFromMime(file.type) };
+    return { data: await blob.arrayBuffer(), ext: "webp" };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function attachImageFile(app: App, file: File, textarea: HTMLTextAreaElement): Promise<void> {
   if (!file.type.startsWith("image/")) return;
   await ensureAttachmentsFolder(app);
+  const { data, ext } = await convertToWebp(file);
   const baseName = `Pasted image ${attachmentTimestamp(new Date())}`;
-  const ext = extFromMime(file.type);
   const path = await uniqueAttachmentPath(app, baseName, ext);
-  await app.vault.createBinary(path, await file.arrayBuffer());
+  await app.vault.createBinary(path, data);
   const filename = path.slice(ATTACHMENT_FOLDER.length + 1);
   insertAtCursor(textarea, `\n![[${filename}]]\n`);
 }
